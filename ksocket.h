@@ -54,41 +54,41 @@ typedef struct
 
 typedef struct
 {
-    int window_size;
+    int wnd_size;
     uint8_t seq_nums[BUF_SIZE];
     time_t send_time[BUF_SIZE];
     uint8_t next_seq_num;
     int start;
-    int count;
+    int cnt;
 } swnd_t;
 
 
 typedef struct
 {
-    int window_size;
-    uint8_t expected_seq;
+    int wnd_size;
+    uint8_t exptd_seq;
     uint8_t last_ack;
-    uint8_t received_seq[BUF_SIZE];
+    uint8_t rcvd_seq[BUF_SIZE];
 } rwnd_t;
 
 
 
 typedef struct
 {
-    ktp_packet messages[BUF_SIZE];
+    ktp_packet msg[BUF_SIZE];
     int head;
     int tail;
-    int count;
+    int cnt;
 } s_buf_t;
 
 
 
 typedef struct
 {
-    ktp_packet messages[BUF_SIZE];
+    ktp_packet msg[BUF_SIZE];
     int head;
     int tail;
-    int count;
+    int cnt;
 } r_buf_t;
 
 //ktp socket entry in shared memory
