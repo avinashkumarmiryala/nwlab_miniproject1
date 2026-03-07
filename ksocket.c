@@ -115,6 +115,7 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
     sm->sockets[sockfd].send_buf.tail = (sm->sockets[sockfd].send_buf.tail + 1)%BUF_SIZE;
 
     if(len>MSG_SIZE) len = MSG_SIZE;
+    sm->sockets[sockfd].send_buf.msg[t].len = len;
     memcpy(sm->sockets[sockfd].send_buf.msg[t].data, buf, len); //check once more
 
     //window size field is filled if type = ACK
@@ -141,8 +142,10 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
     int h = sm->sockets[sockfd].recv_buf.head;
     sm->sockets[sockfd].recv_buf.head = (sm->sockets[sockfd].recv_buf.head + 1)%BUF_SIZE;
 
-    size_t copy_len = len;
-    if(copy_len > MSG_SIZE)  copy_len = MSG_SIZE;
+    size_t copy_len = sm->sockets[sockfd].recv_buf.msg[h].len;
+
+    if(copy_len > len)
+        copy_len = len;
 
     memcpy(buf,sm->sockets[sockfd].recv_buf.msg[h].data,copy_len);    
 

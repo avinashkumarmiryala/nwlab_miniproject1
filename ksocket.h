@@ -48,6 +48,7 @@ typedef struct
 {
     ktp_header header;
     char data[MSG_SIZE];
+    uint16_t len;
 } ktp_packet;
 
 
