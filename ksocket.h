@@ -119,7 +119,7 @@ typedef struct
     pthread_mutex_t lock;
 } sh_mem;
 
-//func defn
+
 
 int k_socket(int domain, int type, int protocol);
 
@@ -145,6 +145,6 @@ int k_recvfrom(int sockfd,
 
 int k_close(int sockfd);
 
-int dropMessage(float p);
+int dropmsg(float p);
 
 #endif
