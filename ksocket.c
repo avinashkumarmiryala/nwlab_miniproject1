@@ -3,16 +3,35 @@
 #include <string.h>
 #include <sys/select.h>
 
-sh_mem* sm;
+
 int shmid;
 
 //init the mem
 void init(){
-    int key = ftok("documentation.txt",1);
-    shmid = shmget(key, sizeof(sh_mem), IPC_CREAT | 0666);
-    sm = shmat(shmid, NULL, 0);
-}
+    key_t key = ftok("documentation.txt",1);
 
+    shmid = shmget(key, sizeof(sh_mem), IPC_CREAT | 0666);
+    if(shmid < 0){
+        perror("shmget");
+        exit(1);
+    }
+
+    sm = shmat(shmid, NULL, 0);
+    if(sm == (void*)-1){
+        perror("shmat");
+        exit(1);
+    }
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+
+    pthread_mutex_init(&sm->lock, &attr);
+
+    for(int i=0;i<MAX_KTP_SOCK;i++){
+        sm->sockets[i].is_free = 1;
+    }
+}
 
 int dropmsg(float p){
     float r = (float)rand() / RAND_MAX;
@@ -32,15 +51,17 @@ int k_socket(int domain, int type, int protocol){
             break;
         }
     }
-    pthread_mutex_unlock(&sm->lock);
+    
     if(idx==-1){
         k_errno = ENOSPACE;
+        pthread_mutex_unlock(&sm->lock);
         return -1;
     }
     
     int sfd = socket(AF_INET,SOCK_DGRAM,0);
     if (sfd < 0){
         sm->sockets[idx].is_free = 1;
+        pthread_mutex_unlock(&sm->lock);
         return -1;
     }
     sm->sockets[idx].udp_sockfd = sfd;
@@ -66,6 +87,7 @@ int k_socket(int domain, int type, int protocol){
 
     sm->sockets[idx].nospace = 0;
 
+    pthread_mutex_unlock(&sm->lock);
     return idx;
 }
 
@@ -170,4 +192,12 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
 
     return copy_len;
 
+}
+
+
+int k_close(int ksockfd){
+    int udpsock = sm->sockets[ksockfd].udp_sockfd;
+    int c = close(udpsock);
+    sm->sockets[ksockfd].is_free = 1;
+    return c;
 }

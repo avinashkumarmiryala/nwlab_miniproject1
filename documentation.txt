@@ -1,0 +1,18 @@
+
+
+
+           USER APPLICATION
+           ─────────────────
+
+k_sendto()               k_recvfrom()
+     │                        │
+     ▼                        ▼
+   send_buf                recv_buf
+        │                     ▲
+        │                     │
+        ▼                     │
+     Thread S             Thread R
+  (sender logic)       (receiver logic)
+        │                     ▲
+        │                     │
+        └────── UDP NETWORK ──┘

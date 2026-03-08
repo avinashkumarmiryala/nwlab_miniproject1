@@ -31,6 +31,7 @@
 
 extern int k_errno;
 
+
 #define DATA 1
 #define ACK 2
 
@@ -121,6 +122,9 @@ typedef struct
 } sh_mem;
 
 
+extern sh_mem* sm;
+
+void init();
 
 int k_socket(int domain, int type, int protocol);
 
