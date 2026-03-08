@@ -28,9 +28,11 @@ void init(){
 
     pthread_mutex_init(&sm->lock, &attr);
 
+    pthread_mutex_lock(&sm->lock);
     for(int i=0;i<MAX_KTP_SOCK;i++){
         sm->sockets[i].is_free = 1;
     }
+    pthread_mutex_unlock(&sm->lock);
 }
 
 int dropmsg(float p){
@@ -85,6 +87,11 @@ int k_socket(int domain, int type, int protocol){
     sm->sockets[idx].rwnd.exptd_seq = 1;
     sm->sockets[idx].rwnd.last_ack = 0;
 
+    //init to check whether bound or not
+    //if bound then the port value will be updated
+    sm->sockets[idx].dest_addr.sin_port = 0;
+    sm->sockets[idx].src_addr.sin_port = 0;
+
     sm->sockets[idx].nospace = 0;
 
     pthread_mutex_unlock(&sm->lock);
@@ -92,6 +99,7 @@ int k_socket(int domain, int type, int protocol){
 }
 
 int k_bind(int sockfd, const char *src_ip, int src_port, const char *dest_ip, int dest_port){
+    pthread_mutex_lock(&sm->lock);
     int udpsock = sm->sockets[sockfd].udp_sockfd;
 
     sm->sockets[sockfd].src_addr.sin_addr.s_addr = inet_addr(src_ip);
@@ -101,21 +109,33 @@ int k_bind(int sockfd, const char *src_ip, int src_port, const char *dest_ip, in
     struct sockaddr_in src = sm->sockets[sockfd].src_addr;
     socklen_t srclen = sizeof(src);
     int b = bind(udpsock,(struct sockaddr*)&(src),srclen);
-    if(b == -1) return -1;
+    if(b == -1) {
+        pthread_mutex_unlock(&sm->lock);
+        return -1;
+    }
 
     sm->sockets[sockfd].dest_addr.sin_addr.s_addr = inet_addr(dest_ip);
     sm->sockets[sockfd].dest_addr.sin_family = AF_INET;
     sm->sockets[sockfd].dest_addr.sin_port = htons(dest_port);
+    pthread_mutex_unlock(&sm->lock);
 
     return 0;
 }
 
 int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockaddr *dest_addr,socklen_t addrlen){
+    pthread_mutex_lock(&sm->lock);
     if(dest_addr == NULL){
         k_errno = ENOTBOUND;
+        pthread_mutex_unlock(&sm->lock);
         return -1;
     }
     if(sockfd < 0 || sockfd >= MAX_KTP_SOCK){
+        pthread_mutex_unlock(&sm->lock);
+        return -1;
+    }
+    if(sm->sockets[sockfd].dest_addr.sin_port == 0){
+        //not yet bound
+        pthread_mutex_unlock(&sm->lock);
         return -1;
     }
     struct sockaddr_in *dest = (struct sockaddr_in*)(dest_addr);
@@ -125,12 +145,14 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
 
     if((daddr!=dest->sin_addr.s_addr) || (dport!=dest->sin_port) || (dfamily!=dest->sin_family)){
         k_errno = ENOTBOUND;
+        pthread_mutex_unlock(&sm->lock);
         return -1;
     }
     
     if(sm->sockets[sockfd].send_buf.cnt==BUF_SIZE) {
         //filled
         //0 bytes sent
+        pthread_mutex_unlock(&sm->lock);
         return 0;
     }
     int t = sm->sockets[sockfd].send_buf.tail;
@@ -147,17 +169,21 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
 
     sm->sockets[sockfd].send_buf.cnt+=1;
 
+    pthread_mutex_unlock(&sm->lock);
     return len;
 }
 
 int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_addr,socklen_t *addrlen){
 
+    pthread_mutex_lock(&sm->lock);
     if(sockfd < 0 || sockfd >= MAX_KTP_SOCK){
+        pthread_mutex_unlock(&sm->lock);
         return -1;
     }
     
     if(sm->sockets[sockfd].recv_buf.cnt==0) {
         k_errno = ENOMESSAGE;
+        pthread_mutex_unlock(&sm->lock);
         return -1;
     }
 
@@ -190,14 +216,18 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
         *addrlen = sizeof(struct sockaddr_in);
     }
 
+    pthread_mutex_unlock(&sm->lock);
     return copy_len;
 
 }
 
 
 int k_close(int ksockfd){
+    pthread_mutex_lock(&sm->lock);
     int udpsock = sm->sockets[ksockfd].udp_sockfd;
     int c = close(udpsock);
+    
     sm->sockets[ksockfd].is_free = 1;
+    pthread_mutex_unlock(&sm->lock);
     return c;
 }
