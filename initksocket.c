@@ -3,6 +3,10 @@
 #include <string.h>
 #include <sys/select.h>
 
+int min(int a, int b) {
+    if(a>b) return b;
+    return a;
+}
 
 void* R(void *arg){
     //HARSHA
@@ -41,8 +45,10 @@ void* S(void *arg){
                 }
             }
 
-            while ((sm->sockets[i].swnd.cnt < sm->sockets[i].swnd.wnd_size) && 
-            (sm->sockets[i].send_buf.cnt > sm->sockets[i].swnd.cnt)){
+            int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].rwnd.wnd_size);
+
+            while ((sm->sockets[i].swnd.cnt < eff_wnd) &&
+                (sm->sockets[i].send_buf.cnt > sm->sockets[i].swnd.cnt)){
                 int idx = (sm->sockets[i].send_buf.head + sm->sockets[i].swnd.cnt) % BUF_SIZE;
 
                 ktp_packet pkt = sm->sockets[i].send_buf.msg[idx];

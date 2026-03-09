@@ -200,6 +200,8 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
     if(sm->sockets[sockfd].rwnd.wnd_size < BUF_SIZE)  sm->sockets[sockfd].rwnd.wnd_size++;
 
     sm->sockets[sockfd].recv_buf.cnt-=1;
+    if (sm->sockets[sockfd].nospace == 1) sm->sockets[sockfd].nospace = 0;
+    //now, the thread R should send an ACK with the updated rwnd size.
 
     if(src_addr != NULL){
         struct sockaddr_in *src = (struct sockaddr_in*)(src_addr);
