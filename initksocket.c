@@ -10,8 +10,174 @@ int min(int a, int b) {
 
 void* R(void *arg){
     //HARSHA
+    
+    while(1){
+        // Build fd_set from all active sockets
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        int max_fd = 0;
 
+        pthread_mutex_lock(&sm->lock);
+        for(int i = 0; i < MAX_KTP_SOCK; i++){
+            if(!sm->sockets[i].is_free && 
+               sm->sockets[i].dest_addr.sin_port != 0){
+                FD_SET(sm->sockets[i].udp_sockfd, &readfds);
+                if(sm->sockets[i].udp_sockfd > max_fd)
+                    max_fd = sm->sockets[i].udp_sockfd;
+            }
+        }
+        pthread_mutex_unlock(&sm->lock);
+
+        // select with timeout
+        struct timeval timeout;
+        timeout.tv_sec = TIMEOUT;
+        timeout.tv_usec = 0;
+
+        int ready = select(max_fd+1, &readfds, NULL, NULL, &timeout);
+
+        //  Timeout 
+        if(ready == 0){
+            pthread_mutex_lock(&sm->lock);
+            for(int i = 0; i < MAX_KTP_SOCK; i++){
+                if(sm->sockets[i].is_free) continue;
+                if(sm->sockets[i].dest_addr.sin_port == 0) continue;
+
+                // nospace was set but now there is space
+                if(sm->sockets[i].nospace == 1 && 
+                   sm->sockets[i].recv_buf.cnt < BUF_SIZE){
+                    
+                    // send duplicate ACK with updated rwnd
+                    ktp_packet ack_pkt;
+                    memset(&ack_pkt, 0, sizeof(ack_pkt));
+                    ack_pkt.header.type = ACK;
+                    ack_pkt.header.seq_num = sm->sockets[i].rwnd.last_ack;
+                    ack_pkt.header.rwnd = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
+
+                    struct sockaddr_in dst = sm->sockets[i].dest_addr;
+                    socklen_t dstlen = sizeof(dst);
+                    sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
+                           0, (struct sockaddr*)&dst, dstlen);
+
+                    sm->sockets[i].nospace = 0;
+                    sm->sockets[i].rwnd.wnd_size = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
+                }
+            }
+            pthread_mutex_unlock(&sm->lock);
+        }
+
+        // Packet arrived
+        if(ready > 0){
+            pthread_mutex_lock(&sm->lock);
+            for(int i = 0; i < MAX_KTP_SOCK; i++){
+                if(sm->sockets[i].is_free) continue;
+                if(sm->sockets[i].dest_addr.sin_port == 0) continue;
+                if(!FD_ISSET(sm->sockets[i].udp_sockfd, &readfds)) continue;
+
+                // receive the packet
+                ktp_packet pkt;
+                struct sockaddr_in src;
+                socklen_t srclen = sizeof(src);
+                recvfrom(sm->sockets[i].udp_sockfd, &pkt, sizeof(pkt),
+                         0, (struct sockaddr*)&src, &srclen);
+
+                // simulate drop
+                if(dropmsg(DROP_PROB)) continue;
+
+               
+                if(pkt.header.type == DATA){
+                    uint8_t seq = pkt.header.seq_num;
+
+                    // check duplicate
+                    int duplicate = 0;
+                    for(int k = 0; k < BUF_SIZE; k++){
+                        if(sm->sockets[i].rwnd.rcvd_seq[k] == seq){
+                            duplicate = 1;
+                            break;
+                        }
+                    }
+                    if(duplicate) continue;
+
+                    // check if recv_buf is full
+                    if(sm->sockets[i].recv_buf.cnt == BUF_SIZE){
+                        sm->sockets[i].nospace = 1;
+                        continue;
+                    }
+
+                    // store in recv_buf
+                    int tail = sm->sockets[i].recv_buf.tail;
+                    sm->sockets[i].recv_buf.msg[tail] = pkt;
+                    sm->sockets[i].recv_buf.tail = (tail + 1) % BUF_SIZE;
+                    sm->sockets[i].recv_buf.cnt++;
+
+                    // mark as received
+                    sm->sockets[i].rwnd.rcvd_seq[tail] = seq;
+
+                    // update rwnd size
+                    sm->sockets[i].rwnd.wnd_size = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
+
+                    // check if in order
+                    if(seq == sm->sockets[i].rwnd.exptd_seq){
+                        // advance exptd_seq
+                        sm->sockets[i].rwnd.last_ack = seq;
+                        sm->sockets[i].rwnd.exptd_seq = (seq + 1) % SEQ_NUM_MOD;
+
+                        // send ACK
+                        ktp_packet ack_pkt;
+                        memset(&ack_pkt, 0, sizeof(ack_pkt));
+                        ack_pkt.header.type = ACK;
+                        ack_pkt.header.seq_num = sm->sockets[i].rwnd.last_ack;
+                        ack_pkt.header.rwnd = sm->sockets[i].rwnd.wnd_size;
+
+                        struct sockaddr_in dst = sm->sockets[i].dest_addr;
+                        socklen_t dstlen = sizeof(dst);
+                        sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
+                               0, (struct sockaddr*)&dst, dstlen);
+                    }
+                    // out of order — store but don't ACK
+                }
+
+              
+                else if(pkt.header.type == ACK){
+                    uint8_t ack_no = pkt.header.seq_num;
+                    uint8_t new_rwnd = pkt.header.rwnd;
+                    sm->sockets[i].swnd.wnd_size = new_rwnd;
+
+                    // slide window 
+                    while(sm->sockets[i].swnd.cnt > 0){
+                        int idx = sm->sockets[i].swnd.start % BUF_SIZE;
+                        uint8_t seq = sm->sockets[i].send_buf.msg[idx].header.seq_num;
+
+                        // check if this message is ACKed
+                        int acked = 0;
+                        // simple check without wrap around
+                        if(seq == ack_no) acked = 1;
+                        // check all seq nums between start and ack_no
+                        uint8_t s = sm->sockets[i].send_buf.msg[
+                            sm->sockets[i].swnd.start % BUF_SIZE
+                        ].header.seq_num;
+
+                        if(s == ack_no){
+                            // remove this message
+                            sm->sockets[i].swnd.start = (sm->sockets[i].swnd.start + 1) % BUF_SIZE;
+                            sm->sockets[i].send_buf.head = (sm->sockets[i].send_buf.head + 1) % BUF_SIZE;
+                            sm->sockets[i].send_buf.cnt--;
+                            sm->sockets[i].swnd.cnt--;
+                            break;
+                        } else {
+                            // remove messages before ack_no
+                            sm->sockets[i].swnd.start = (sm->sockets[i].swnd.start + 1) % BUF_SIZE;
+                            sm->sockets[i].send_buf.head = (sm->sockets[i].send_buf.head + 1) % BUF_SIZE;
+                            sm->sockets[i].send_buf.cnt--;
+                            sm->sockets[i].swnd.cnt--;
+                        }
+                    }
+                }
+            }
+            pthread_mutex_unlock(&sm->lock);
+        }
+    }
 }
+
 void* S(void *arg){
     //AVINASH
     while(1){
