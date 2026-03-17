@@ -111,6 +111,7 @@ typedef struct
     rwnd_t rwnd;
 
     int nospace;
+    int send_ack;
 } ktp_sock;
 
 //shared memory structure

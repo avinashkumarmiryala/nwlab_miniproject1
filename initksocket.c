@@ -37,33 +37,29 @@ void* R(void *arg){
 
         //  Timeout 
         if(ready == 0){
-            pthread_mutex_lock(&sm->lock);
-            for(int i = 0; i < MAX_KTP_SOCK; i++){
-                if(sm->sockets[i].is_free) continue;
-                if(sm->sockets[i].dest_addr.sin_port == 0) continue;
+         pthread_mutex_lock(&sm->lock);
+         for(int i = 0; i < MAX_KTP_SOCK; i++){
+            if(sm->sockets[i].is_free) continue;
+            if(sm->sockets[i].dest_addr.sin_port == 0) continue;
 
-                // nospace was set but now there is space
-                if(sm->sockets[i].nospace == 1 && 
-                   sm->sockets[i].recv_buf.cnt < BUF_SIZE){
-                    
-                    // send duplicate ACK with updated rwnd
-                    ktp_packet ack_pkt;
-                    memset(&ack_pkt, 0, sizeof(ack_pkt));
-                    ack_pkt.header.type = ACK;
-                    ack_pkt.header.seq_num = sm->sockets[i].rwnd.last_ack;
-                    ack_pkt.header.rwnd = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
+             if(sm->sockets[i].send_ack == 1){
+            sm->sockets[i].send_ack = 0;
+            sm->sockets[i].rwnd.wnd_size = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
 
-                    struct sockaddr_in dst = sm->sockets[i].dest_addr;
-                    socklen_t dstlen = sizeof(dst);
-                    sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
-                           0, (struct sockaddr*)&dst, dstlen);
+            ktp_packet ack_pkt;
+            memset(&ack_pkt, 0, sizeof(ack_pkt));
+            ack_pkt.header.type = ACK;
+            ack_pkt.header.seq_num = sm->sockets[i].rwnd.last_ack;
+            ack_pkt.header.rwnd = sm->sockets[i].rwnd.wnd_size;
 
-                    sm->sockets[i].nospace = 0;
-                    sm->sockets[i].rwnd.wnd_size = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
-                }
-            }
-            pthread_mutex_unlock(&sm->lock);
+            struct sockaddr_in dst = sm->sockets[i].dest_addr;
+            socklen_t dstlen = sizeof(dst);
+            sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
+                   0, (struct sockaddr*)&dst, dstlen);
         }
+    }
+    pthread_mutex_unlock(&sm->lock);
+}
 
         // Packet arrived
         if(ready > 0){

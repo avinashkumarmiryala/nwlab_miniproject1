@@ -78,12 +78,12 @@ int k_socket(int domain, int type, int protocol){
     sm->sockets[idx].recv_buf.head = 0;
     sm->sockets[idx].recv_buf.tail = 0;
 
-    sm->sockets[idx].swnd.wnd_size = 10;
+    sm->sockets[idx].swnd.wnd_size = 5;
     sm->sockets[idx].swnd.start = 0;
     sm->sockets[idx].swnd.cnt = 0;
     sm->sockets[idx].swnd.next_seq_num = 1;
 
-    sm->sockets[idx].rwnd.wnd_size = 10;
+    sm->sockets[idx].rwnd.wnd_size = 5;
     sm->sockets[idx].rwnd.exptd_seq = 1;
     sm->sockets[idx].rwnd.last_ack = 0;
 
@@ -200,7 +200,10 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
     if(sm->sockets[sockfd].rwnd.wnd_size < BUF_SIZE)  sm->sockets[sockfd].rwnd.wnd_size++;
 
     sm->sockets[sockfd].recv_buf.cnt-=1;
-    if (sm->sockets[sockfd].nospace == 1) sm->sockets[sockfd].nospace = 0;
+    if (sm->sockets[sockfd].nospace == 1){
+    sm->sockets[sockfd].nospace = 0;
+    sm->sockets[sockfd].send_ack = 1;
+}
     //now, the thread R should send an ACK with the updated rwnd size.
 
     if(src_addr != NULL){
