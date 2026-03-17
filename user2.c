@@ -5,8 +5,8 @@
 
 #define N 256
 int main(){
-
-    int sockfd = k_socket(AF_INET,SOCK_DGRAM,0);
+    init();
+    int sockfd = k_socket(AF_INET,SOCK_KTP,0);
     
     const char* myip = "127.0.0.1";
     const char* dstip = "127.0.0.1";
@@ -33,8 +33,18 @@ int main(){
 
     while(1){
         char rbuf[N];
-        k_recvfrom(sockfd,rbuf,sizeof(rbuf),0,(struct sockaddr*)&dstaddr,&dstlen);
-        printf("The message is %s\n",rbuf);
+        int rbytes = k_recvfrom(sockfd,rbuf,sizeof(rbuf),0,(struct sockaddr*)&dstaddr,&dstlen);
+        if(rbytes>0){
+            printf("The message is %s\n",rbuf);
+        }
+        else if(rbytes==0){
+            printf("Connection closed\n");
+            break;
+        }
+        else{
+            //printf("Error!");
+            continue;
+        }
         
         if(!strcmp("QUIT",rbuf)) break;
 

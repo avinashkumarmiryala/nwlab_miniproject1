@@ -120,6 +120,8 @@ typedef struct
 {
     ktp_sock sockets[MAX_KTP_SOCK];
     pthread_mutex_t lock;
+    //pthread_cond_t cond;
+    int init;
 } sh_mem;
 
 

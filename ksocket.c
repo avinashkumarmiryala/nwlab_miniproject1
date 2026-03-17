@@ -5,15 +5,27 @@
 
 
 int shmid;
+sh_mem* sm;
+int k_errno;
 
 //init the mem
 void init(){
-    key_t key = ftok("documentation.txt",1);
+    key_t key = ftok("documentation.txt", 1);
 
-    shmid = shmget(key, sizeof(sh_mem), IPC_CREAT | 0666);
-    if(shmid < 0){
-        perror("shmget");
-        exit(1);
+    int first = 0;
+
+    // Try to create exclusively
+    shmid = shmget(key, sizeof(sh_mem), IPC_CREAT | IPC_EXCL | 0666);
+    if(shmid == -1){
+        // Already exists → just get it
+        shmid = shmget(key, sizeof(sh_mem), 0666);
+        if(shmid == -1){
+            perror("shmget");
+            exit(1);
+        }
+    } else {
+        // This process created it
+        first = 1;
     }
 
     sm = shmat(shmid, NULL, 0);
@@ -22,17 +34,25 @@ void init(){
         exit(1);
     }
 
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+    // Only FIRST process initializes
+    if(first){
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+        pthread_mutex_init(&sm->lock, &attr);
 
-    pthread_mutex_init(&sm->lock, &attr);
-
-    pthread_mutex_lock(&sm->lock);
-    for(int i=0;i<MAX_KTP_SOCK;i++){
-        sm->sockets[i].is_free = 1;
+        /*pthread_condattr_t cattr;
+        pthread_condattr_init(&cattr);
+        pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+        pthread_cond_init(&sm->cond, &cattr);*/
+        
+        pthread_mutex_lock(&sm->lock);
+        for(int i = 0; i < MAX_KTP_SOCK; i++){
+            sm->sockets[i].is_free = 1;
+        }
+        sm->init = 1;   // mark initialized
+        pthread_mutex_unlock(&sm->lock);
     }
-    pthread_mutex_unlock(&sm->lock);
 }
 
 int dropmsg(float p){

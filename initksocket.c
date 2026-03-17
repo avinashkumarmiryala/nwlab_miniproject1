@@ -10,7 +10,7 @@ int min(int a, int b) {
 
 void* R(void *arg){
     //HARSHA
-    
+    printf("R thread running\n");
     while(1){
         // Build fd_set from all active sockets
         fd_set readfds;
@@ -37,29 +37,29 @@ void* R(void *arg){
 
         //  Timeout 
         if(ready == 0){
-         pthread_mutex_lock(&sm->lock);
-         for(int i = 0; i < MAX_KTP_SOCK; i++){
-            if(sm->sockets[i].is_free) continue;
-            if(sm->sockets[i].dest_addr.sin_port == 0) continue;
+            pthread_mutex_lock(&sm->lock);
+            for(int i = 0; i < MAX_KTP_SOCK; i++){
+                if(sm->sockets[i].is_free) continue;
+                if(sm->sockets[i].dest_addr.sin_port == 0) continue;
 
-             if(sm->sockets[i].send_ack == 1){
-            sm->sockets[i].send_ack = 0;
-            sm->sockets[i].rwnd.wnd_size = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
+                if(sm->sockets[i].send_ack == 1){
+                    sm->sockets[i].send_ack = 0;
+                    sm->sockets[i].rwnd.wnd_size = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
 
-            ktp_packet ack_pkt;
-            memset(&ack_pkt, 0, sizeof(ack_pkt));
-            ack_pkt.header.type = ACK;
-            ack_pkt.header.seq_num = sm->sockets[i].rwnd.last_ack;
-            ack_pkt.header.rwnd = sm->sockets[i].rwnd.wnd_size;
+                    ktp_packet ack_pkt;
+                    memset(&ack_pkt, 0, sizeof(ack_pkt));
+                    ack_pkt.header.type = ACK;
+                    ack_pkt.header.seq_num = sm->sockets[i].rwnd.last_ack;
+                    ack_pkt.header.rwnd = sm->sockets[i].rwnd.wnd_size;
 
-            struct sockaddr_in dst = sm->sockets[i].dest_addr;
-            socklen_t dstlen = sizeof(dst);
-            sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
-                   0, (struct sockaddr*)&dst, dstlen);
+                    struct sockaddr_in dst = sm->sockets[i].dest_addr;
+                    socklen_t dstlen = sizeof(dst);
+                    sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
+                        0, (struct sockaddr*)&dst, dstlen);
+                }
+            }
+            pthread_mutex_unlock(&sm->lock);
         }
-    }
-    pthread_mutex_unlock(&sm->lock);
-}
 
         // Packet arrived
         if(ready > 0){
@@ -176,6 +176,7 @@ void* R(void *arg){
 
 void* S(void *arg){
     //AVINASH
+    printf("S thread running\n");
     while(1){
         int t = (TIMEOUT * 1e6)/2;
         usleep(t);

@@ -5,8 +5,8 @@
 
 #define N 256
 int main(){
-
-    int sockfd = k_socket(AF_INET,SOCK_DGRAM,0);
+    init();
+    int sockfd = k_socket(AF_INET,SOCK_KTP,0);
     
     const char* myip = "127.0.0.1";
     const char* dstip = "127.0.0.1";
@@ -32,6 +32,7 @@ int main(){
     }
 
     while(1){
+        printf("Enter the input:");
         char sbuf[N];
         fgets(sbuf,N,stdin);
         sbuf[strcspn(sbuf,"\n")] = '\0';
