@@ -2,6 +2,7 @@
 #include <sys/shm.h>
 #include <string.h>
 #include <sys/select.h>
+#include<errno.h>
 
 
 int shmid;
@@ -80,13 +81,15 @@ int k_socket(int domain, int type, int protocol){
         return -1;
     }
     
-    int sfd = socket(AF_INET,SOCK_DGRAM,0);
-    if (sfd < 0){
+    //int sfd = socket(AF_INET,SOCK_DGRAM,0);
+    sm->sockets[idx].needs_udp_init = 1;
+    sm->sockets[idx].udp_sockfd = -1;
+   /*if (sfd < 0){
         sm->sockets[idx].is_free = 1;
         pthread_mutex_unlock(&sm->lock);
         return -1;
-    }
-    sm->sockets[idx].udp_sockfd = sfd;
+    }*/ 
+    //sm->sockets[idx].udp_sockfd = sfd;
 
     sm->sockets[idx].pid = getpid();
 
@@ -120,25 +123,34 @@ int k_socket(int domain, int type, int protocol){
 
 int k_bind(int sockfd, const char *src_ip, int src_port, const char *dest_ip, int dest_port){
     pthread_mutex_lock(&sm->lock);
-    int udpsock = sm->sockets[sockfd].udp_sockfd;
+    
+    // wait for Thread R to create UDP socket
+    while(sm->sockets[sockfd].udp_sockfd == -1){
+        pthread_mutex_unlock(&sm->lock);
+        usleep(100000);
+        pthread_mutex_lock(&sm->lock);
+    }
 
+    // just store the addresses — let Thread R do the actual bind!
     sm->sockets[sockfd].src_addr.sin_addr.s_addr = inet_addr(src_ip);
     sm->sockets[sockfd].src_addr.sin_family = AF_INET;
     sm->sockets[sockfd].src_addr.sin_port = htons(src_port);
 
-    struct sockaddr_in src = sm->sockets[sockfd].src_addr;
-    socklen_t srclen = sizeof(src);
-    int b = bind(udpsock,(struct sockaddr*)&(src),srclen);
-    if(b == -1) {
-        pthread_mutex_unlock(&sm->lock);
-        return -1;
-    }
-
     sm->sockets[sockfd].dest_addr.sin_addr.s_addr = inet_addr(dest_ip);
     sm->sockets[sockfd].dest_addr.sin_family = AF_INET;
     sm->sockets[sockfd].dest_addr.sin_port = htons(dest_port);
-    pthread_mutex_unlock(&sm->lock);
 
+    // signal Thread R to bind
+    sm->sockets[sockfd].needs_bind = 1;
+
+    // wait for Thread R to finish binding
+    while(sm->sockets[sockfd].needs_bind == 1){
+        pthread_mutex_unlock(&sm->lock);
+        usleep(100000);
+        pthread_mutex_lock(&sm->lock);
+    }
+
+    pthread_mutex_unlock(&sm->lock);
     return 0;
 }
 

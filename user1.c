@@ -41,8 +41,14 @@ int main(){
         if(!strcmp("QUIT",sbuf)) break;
 
         char rbuf[N];
-        k_recvfrom(sockfd,rbuf,sizeof(rbuf),0,(struct sockaddr*)&dstaddr,&dstlen);
-        printf("The response is %s",rbuf);
+        while(1){
+            int rbytes = k_recvfrom(sockfd,rbuf,sizeof(rbuf),0,(struct sockaddr*)&dstaddr,&dstlen);
+            if(rbytes>=0) break;
+
+        }
+        
+
+        printf("The response is %s\n",rbuf);
     }
     k_close(sockfd);
     return 0;

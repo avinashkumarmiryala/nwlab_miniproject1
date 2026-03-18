@@ -112,6 +112,8 @@ typedef struct
 
     int nospace;
     int send_ack;
+    int needs_udp_init; 
+    int needs_bind; // 1 = initksocket needs to create UDP socket for this
 } ktp_sock;
 
 //shared memory structure
