@@ -13,10 +13,10 @@ int main(){
     int my_port = 5000;
     int dst_port = 6000;
 
-    struct sockaddr_in myaddr;
+    /*struct sockaddr_in myaddr;
     myaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     myaddr.sin_family = AF_INET;
-    myaddr.sin_port = htons(5000);
+    myaddr.sin_port = htons(5000);*/
 
     struct sockaddr_in dstaddr;
     dstaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -43,10 +43,12 @@ int main(){
         char rbuf[N];
         while(1){
             int rbytes = k_recvfrom(sockfd,rbuf,sizeof(rbuf),0,(struct sockaddr*)&dstaddr,&dstlen);
-            if(rbytes>=0) break;
-
+            if(rbytes>0) break;
+            else if(rbytes==0){
+                printf("Connection closed by peer\n");
+                break;
+            }
         }
-        
 
         printf("The response is %s\n",rbuf);
     }

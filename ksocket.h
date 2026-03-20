@@ -23,7 +23,7 @@
 #define SEQ_NUM_MOD 256
 
 #define TIMEOUT 5        // T seconds
-#define DROP_PROB 0.05   // p value (change during testing)
+#define DROP_PROB 0.50   // p value (change during testing)
 
 #define ENOSPACE 1001
 #define ENOTBOUND 1002
@@ -56,19 +56,20 @@ typedef struct
 
 typedef struct
 {
-    int wnd_size;
+    int wnd_size;                   //size of the sender window, a fixed number
+    int acked_wnd_size;             //size of the reciever window, as informed by the ACK 
     uint8_t seq_nums[BUF_SIZE];
     time_t send_time[BUF_SIZE];
     uint8_t next_seq_num;
     int start;
-    int cnt;
+    int cnt;                        //number of sent but not ACKED packets
 } swnd_t;
 
 
 typedef struct
 {
-    int wnd_size;
-    uint8_t exptd_seq;
+    int wnd_size;                   //BUF_SIZE - recv_buf.cnt (Note that it is NOT a fixed number (unlike swnd.wnd_size))
+    uint8_t exptd_seq;              
     uint8_t last_ack;
     uint8_t rcvd_seq[BUF_SIZE];
 } rwnd_t;
@@ -80,7 +81,7 @@ typedef struct
     ktp_packet msg[BUF_SIZE];
     int head;
     int tail;
-    int cnt;
+    int cnt;                            //total number of positions in the send_buf containing packets - sent not ACKED + not yet sent 
 } s_buf_t;
 
 
@@ -156,5 +157,7 @@ int k_recvfrom(int sockfd,
 int k_close(int sockfd);
 
 int dropmsg(float p);
+
+void sig_handler(int sig);
 
 #endif

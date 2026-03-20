@@ -2,18 +2,32 @@
 #include <sys/shm.h>
 #include <string.h>
 #include <sys/select.h>
-#include<errno.h>
+#include <errno.h>
+#include <signal.h>
 
-
-int shmid;
-sh_mem* sm;
+int shmid = -1;
+sh_mem* sm = NULL;
 int k_errno;
+int first;
+
+void sig_handler(int sig) {
+    printf("\nCleaning up...\n");
+    if (sm != NULL && sm != (void*)-1) {
+        shmdt(sm);
+        sm = NULL;
+    }
+    if (first && shmid != -1) {
+        printf("Removing shared memory...\n");
+        shmctl(shmid, IPC_RMID, NULL);
+    }
+    exit(0);
+}
 
 //init the mem
 void init(){
     key_t key = ftok("documentation.txt", 1);
 
-    int first = 0;
+    first = 0;
 
     // Try to create exclusively
     shmid = shmget(key, sizeof(sh_mem), IPC_CREAT | IPC_EXCL | 0666);
@@ -101,12 +115,13 @@ int k_socket(int domain, int type, int protocol){
     sm->sockets[idx].recv_buf.head = 0;
     sm->sockets[idx].recv_buf.tail = 0;
 
+    sm->sockets[idx].swnd.acked_wnd_size = 10;
     sm->sockets[idx].swnd.wnd_size = 5;
     sm->sockets[idx].swnd.start = 0;
     sm->sockets[idx].swnd.cnt = 0;
     sm->sockets[idx].swnd.next_seq_num = 1;
 
-    sm->sockets[idx].rwnd.wnd_size = 5;
+    sm->sockets[idx].rwnd.wnd_size = 10;
     sm->sockets[idx].rwnd.exptd_seq = 1;
     sm->sockets[idx].rwnd.last_ack = 0;
 
@@ -233,9 +248,9 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
 
     sm->sockets[sockfd].recv_buf.cnt-=1;
     if (sm->sockets[sockfd].nospace == 1){
-    sm->sockets[sockfd].nospace = 0;
-    sm->sockets[sockfd].send_ack = 1;
-}
+        sm->sockets[sockfd].nospace = 0;
+        sm->sockets[sockfd].send_ack = 1;
+    }
     //now, the thread R should send an ACK with the updated rwnd size.
 
     if(src_addr != NULL){

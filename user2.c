@@ -13,10 +13,10 @@ int main(){
     int my_port = 6000;
     int dst_port = 5000;
 
-    struct sockaddr_in myaddr;
+    /*struct sockaddr_in myaddr;
     myaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     myaddr.sin_family = AF_INET;
-    myaddr.sin_port = htons(6000);
+    myaddr.sin_port = htons(6000);*/
 
     struct sockaddr_in dstaddr;
     dstaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -33,20 +33,22 @@ int main(){
 
     while(1){
         char rbuf[N];
-        int rbytes = k_recvfrom(sockfd,rbuf,sizeof(rbuf),0,(struct sockaddr*)&dstaddr,&dstlen);
-        if(rbytes>0){
-            printf("The message is %s\n",rbuf);
-        }
-        else if(rbytes==0){
-            printf("Connection closed\n");
-            break;
-        }
-        else{
-            //printf("Error!");
-            continue;
+        while(1){
+            int rbytes = k_recvfrom(sockfd,rbuf,sizeof(rbuf),0,(struct sockaddr*)&dstaddr,&dstlen);
+            if(rbytes>0){
+                printf("The message is %s\n",rbuf);
+                break;
+            }
+            else if(rbytes==0){
+                printf("Connection closed by peer\n");
+                break;
+            }
         }
         
-        if(!strcmp("QUIT",rbuf)) break;
+        if(!strcmp("QUIT",rbuf)) {
+            printf("Quitting...\n");
+            break;
+        }
 
         printf("Enter the reply:");
         char sbuf[N];

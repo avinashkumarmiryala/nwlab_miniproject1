@@ -2,7 +2,8 @@
 #include <sys/shm.h>
 #include <string.h>
 #include <sys/select.h>
-
+#include <signal.h>
+const char *strtype[] = {"MSG", "DATA", "ACK"};
 int min(int a, int b) {
     if(a>b) return b;
     return a;
@@ -16,33 +17,33 @@ void* R(void *arg){
         // Build fd_set from all active sockets
         // at start of while loop, before building fd_set
         pthread_mutex_lock(&sm->lock);
-    for(int i = 0; i < MAX_KTP_SOCK; i++){
-        if(!sm->sockets[i].is_free && sm->sockets[i].needs_udp_init == 1){
-            int sfd = socket(AF_INET, SOCK_DGRAM, 0);
-            sm->sockets[i].udp_sockfd = sfd;
-            sm->sockets[i].needs_udp_init = 0;
-            printf("Thread R: created UDP socket %d for KTP socket %d\n", sfd, i);
-        }
-        if(!sm->sockets[i].is_free && sm->sockets[i].needs_bind == 1){
-            struct sockaddr_in src = sm->sockets[i].src_addr;
-            int b = bind(sm->sockets[i].udp_sockfd,
-                        (struct sockaddr*)&src, sizeof(src));
-            if(b == 0){
-                printf("Thread R: bound socket %d successfully\n", i);
-            } else {
-                perror("Thread R bind");
+        for(int i = 0; i < MAX_KTP_SOCK; i++){
+            if(!sm->sockets[i].is_free && sm->sockets[i].needs_udp_init == 1){
+                int sfd = socket(AF_INET, SOCK_DGRAM, 0);
+                sm->sockets[i].udp_sockfd = sfd;
+                sm->sockets[i].needs_udp_init = 0;
+                printf("Thread R: created UDP socket %d for KTP socket %d\n", sfd, i);
             }
-            sm->sockets[i].needs_bind = 0;
+            if(!sm->sockets[i].is_free && sm->sockets[i].needs_bind == 1){
+                struct sockaddr_in src = sm->sockets[i].src_addr;
+                int b = bind(sm->sockets[i].udp_sockfd,
+                            (struct sockaddr*)&src, sizeof(src));
+                if(b == 0){
+                    printf("Thread R: bound socket %d successfully\n", i);
+                } else {
+                    perror("Thread R bind");
+                }
+                sm->sockets[i].needs_bind = 0;
+            }
         }
-}
-pthread_mutex_unlock(&sm->lock);
+        pthread_mutex_unlock(&sm->lock);
         fd_set readfds;
         FD_ZERO(&readfds);
         int max_fd = 0;
 
         pthread_mutex_lock(&sm->lock);
         for(int i = 0; i < MAX_KTP_SOCK; i++){
-            if(!sm->sockets[i].is_free&&sm->sockets[i].src_addr.sin_port != 0 ){
+            if((!sm->sockets[i].is_free && sm->sockets[i].src_addr.sin_port) != 0 ){
                 FD_SET(sm->sockets[i].udp_sockfd, &readfds);
                 if(sm->sockets[i].udp_sockfd > max_fd)
                     max_fd = sm->sockets[i].udp_sockfd;
@@ -50,10 +51,10 @@ pthread_mutex_unlock(&sm->lock);
         }
         pthread_mutex_unlock(&sm->lock);
         if(max_fd == 0){
-        usleep(500000);  // sleep 0.1 seconds if no active sockets
-        continue;
+            usleep(500000);  // sleep 0.1 seconds if no active sockets
+            continue;
         }
-       // printf("Thread R: max_fd = %d\n", max_fd);  // ADD THIS
+        // printf("Thread R: max_fd = %d\n", max_fd);  // ADD THIS
         // select with timeout
         struct timeval timeout;
         timeout.tv_sec = TIMEOUT;
@@ -67,6 +68,7 @@ pthread_mutex_unlock(&sm->lock);
         //  Timeout 
         if(ready == 0){
             pthread_mutex_lock(&sm->lock);
+            printf("Select TIMED OUT\n");
             for(int i = 0; i < MAX_KTP_SOCK; i++){
                 if(sm->sockets[i].is_free) continue;
                 if(sm->sockets[i].dest_addr.sin_port == 0) continue;
@@ -105,13 +107,13 @@ pthread_mutex_unlock(&sm->lock);
                 recvfrom(sm->sockets[i].udp_sockfd, &pkt, sizeof(pkt),
                          0, (struct sockaddr*)&src, &srclen);
                 printf("Thread R: received packet on socket %d\n", i);
-                printf("Thread R: type = %d, seq = %d\n", pkt.header.type, pkt.header.seq_num);
+                printf("Thread R: type = %s, seq = %d\n", strtype[pkt.header.type], pkt.header.seq_num);
                 // simulate drop
                 //if(dropmsg(DROP_PROB)) continue;
                 if(dropmsg(DROP_PROB)){
                     printf("Thread R: packet dropped!\n");
                     continue;
-                    }
+                }
                
                 if(pkt.header.type == DATA){
                     uint8_t seq = pkt.header.seq_num;
@@ -137,7 +139,7 @@ pthread_mutex_unlock(&sm->lock);
                     sm->sockets[i].recv_buf.msg[tail] = pkt;
                     sm->sockets[i].recv_buf.tail = (tail + 1) % BUF_SIZE;
                     sm->sockets[i].recv_buf.cnt++;
-                    printf("Thread R: stored in recv_buf, cnt = %d\n", sm->sockets[i].recv_buf.cnt);
+                    printf("Thread R: stored in recv_buf, cnt = %d\n\n", sm->sockets[i].recv_buf.cnt);
                     // mark as received
                     sm->sockets[i].rwnd.rcvd_seq[tail] = seq;
 
@@ -161,16 +163,21 @@ pthread_mutex_unlock(&sm->lock);
                         socklen_t dstlen = sizeof(dst);
                         sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
                                0, (struct sockaddr*)&dst, dstlen);
-                        printf("Thread R: sent ACK for seq %d\n", pkt.header.seq_num);
+                        printf("Thread R: sent ACK for seq %d\n\n", pkt.header.seq_num);
                     }
-                    // out of order — store but don't ACK
+                    else{
+                        // out of order — store but don't ACK
+                        printf("The expected SEQ NUM is %d\n\n",sm->sockets[i].rwnd.exptd_seq);
+                    }
+                    
                 }
 
               
                 else if(pkt.header.type == ACK){
                     uint8_t ack_no = pkt.header.seq_num;
                     uint8_t new_rwnd = pkt.header.rwnd;
-                    sm->sockets[i].swnd.wnd_size = new_rwnd;
+                    //sm->sockets[i].swnd.wnd_size = new_rwnd;
+                    sm->sockets[i].swnd.acked_wnd_size = new_rwnd;
 
                     // slide window 
                     while(sm->sockets[i].swnd.cnt > 0){
@@ -229,7 +236,7 @@ void* S(void *arg){
                         int j = (bufstart + k) % BUF_SIZE;
                         ktp_packet pkt = sm->sockets[i].send_buf.msg[j];
                         int l = sizeof(pkt);
-
+                        printf("Thread S: Retransmitted from send_buf, cnt = %d\n", sm->sockets[i].send_buf.cnt);
                         int udpsock = sm->sockets[i].udp_sockfd;
                         struct sockaddr_in dst = sm->sockets[i].dest_addr;
                         socklen_t dstlen = sizeof(struct sockaddr_in);
@@ -242,7 +249,9 @@ void* S(void *arg){
                 }
             }
 
-            int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].rwnd.wnd_size);
+            int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
+            //int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].rwnd.wnd_size);
+            printf("Thread S: Eff window size:%d Sender Win Size:%d ACKed Win Size:%d\n",eff_wnd,sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
 
             while ((sm->sockets[i].swnd.cnt < eff_wnd) &&
                 (sm->sockets[i].send_buf.cnt > sm->sockets[i].swnd.cnt)){
@@ -255,7 +264,7 @@ void* S(void *arg){
                 struct sockaddr_in dst = sm->sockets[i].dest_addr;
                 socklen_t dstlen = sizeof(struct sockaddr_in);
                 sendto(udpsock,&pkt,l,0,(struct sockaddr*)&dst,dstlen);
-
+                printf("Thread S: sent DATA for seq %d\n",pkt.header.seq_num);
                 int win = (sm->sockets[i].swnd.start + sm->sockets[i].swnd.cnt) % BUF_SIZE;
                 //one packet added to the window
                 sm->sockets[i].swnd.cnt++;
@@ -273,6 +282,7 @@ int main()
 {
     pthread_t tidS, tidR;
     init();
+    signal(SIGINT, sig_handler);
 
     if(pthread_create(&tidS, NULL, S, NULL) != 0){
         perror("pthread_create S");
