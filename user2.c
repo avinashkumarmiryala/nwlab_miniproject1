@@ -54,10 +54,6 @@ int main(int argc,char* argv[]){
             }
         }
         
-        if(!strcmp("QUIT",rbuf)) {
-            printf("Quitting...\n");
-            break;
-        }
 
         printf("Enter the reply:");
         char sbuf[N];

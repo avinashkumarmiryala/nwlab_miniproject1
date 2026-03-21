@@ -48,7 +48,6 @@ int main(int argc,char* argv[]){
         sbuf[strcspn(sbuf,"\n")] = '\0';
         
         k_sendto(sockfd,sbuf,strlen(sbuf)+1,0,(struct sockaddr*)&dstaddr,dstlen);
-        if(!strcmp("QUIT",sbuf)) break;
 
         char rbuf[N];
         while(1){
