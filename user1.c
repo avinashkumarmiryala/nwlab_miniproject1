@@ -13,7 +13,7 @@ int main(int argc,char* argv[]){
     printf("Sender started, will connect within 10 sec...\n");
     init();
     printf("Please wait for the reciever to spawn the sockets...\n");
-    sleep(5);
+    sleep(10);
     int sockfd = k_socket(AF_INET,SOCK_KTP,0);
     signal(SIGINT,handler);
     
