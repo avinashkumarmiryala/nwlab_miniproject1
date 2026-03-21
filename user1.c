@@ -12,7 +12,8 @@ void handler(int sig){
 int main(int argc,char* argv[]){
     printf("Sender started, will connect within 10 sec...\n");
     init();
-    
+    printf("Please wait for the reciever to spawn the sockets...\n");
+    sleep(5);
     int sockfd = k_socket(AF_INET,SOCK_KTP,0);
     signal(SIGINT,handler);
     
@@ -23,15 +24,11 @@ int main(int argc,char* argv[]){
     if(argc>1) my_port = atoi(argv[1]);
     if(argc>2) dst_port = atoi(argv[2]);
 
-    /*struct sockaddr_in myaddr;
-    myaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    myaddr.sin_family = AF_INET;
-    myaddr.sin_port = htons(5000);*/
 
     struct sockaddr_in dstaddr;
     dstaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     dstaddr.sin_family = AF_INET;
-    dstaddr.sin_port = htons(6000);
+    dstaddr.sin_port = htons(dst_port);
 
     socklen_t dstlen = sizeof(dstaddr);
 

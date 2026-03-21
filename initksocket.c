@@ -27,7 +27,8 @@ void* R(void *arg){
                 int b = bind(sm->sockets[i].udp_sockfd,
                             (struct sockaddr*)&src, sizeof(src));
                 if(b == 0){
-                    printf("Thread R: bound socket %d successfully\n", i);
+                    printf("Thread R: socket %d bound to port %d, watching for packets from port %d\n",i,
+                        ntohs(sm->sockets[i].src_addr.sin_port), ntohs(sm->sockets[i].dest_addr.sin_port));
                 } else {
                     perror("Thread R bind");
                 }

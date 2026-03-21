@@ -177,7 +177,7 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
     uint32_t daddr = sm->sockets[sockfd].dest_addr.sin_addr.s_addr;
     uint16_t dport = sm->sockets[sockfd].dest_addr.sin_port;
     int16_t dfamily = sm->sockets[sockfd].dest_addr.sin_family;
-
+    printf("k_sendto: sending to port %d\n\n", ntohs(dest->sin_port));
     if((daddr!=dest->sin_addr.s_addr) || (dport!=dest->sin_port) || (dfamily!=dest->sin_family)){
         k_errno = ENOTBOUND;
         pthread_mutex_unlock(&sm->lock);
