@@ -22,8 +22,8 @@
 
 #define SEQ_NUM_MOD 256
 
-#define TIMEOUT 5        // T seconds
-#define DROP_PROB 0.05  // p value (change during testing)
+#define TIMEOUT 5        // seconds
+#define DROP_PROB 0.05   
 
 #define ENOSPACE 1001
 #define ENOTBOUND 1002
@@ -81,7 +81,7 @@ typedef struct
     ktp_packet msg[BUF_SIZE];
     int head;
     int tail;
-    int cnt;                            //total number of positions in the send_buf containing packets - sent not ACKED + not yet sent 
+    int cnt;                            //total number of positions in the send_buf containing packets - (sent not ACKED + not yet sent) 
 } s_buf_t;
 
 
@@ -93,8 +93,6 @@ typedef struct
     int tail;
     int cnt;
 } r_buf_t;
-
-//ktp socket entry in shared memory
 
 typedef struct
 {
@@ -114,16 +112,14 @@ typedef struct
     int nospace;
     int send_ack;
     int needs_udp_init; 
-    int needs_bind; // 1 = initksocket needs to create UDP socket for this
+    int needs_bind;             // 1 = initksocket needs to create UDP socket for this
 } ktp_sock;
 
-//shared memory structure
 
 typedef struct
 {
     ktp_sock sockets[MAX_KTP_SOCK];
     pthread_mutex_t lock;
-    //pthread_cond_t cond;
     int init;
 } sh_mem;
 
@@ -134,25 +130,11 @@ void init();
 
 int k_socket(int domain, int type, int protocol);
 
-int k_bind(int sockfd,
-           const char *src_ip,
-           int src_port,
-           const char *dest_ip,
-           int dest_port);
+int k_bind(int sockfd,const char *src_ip,int src_port,const char *dest_ip,int dest_port);
 
-int k_sendto(int sockfd,
-             const void *buf,
-             size_t len,
-             int flags,
-             const struct sockaddr *dest_addr,
-             socklen_t addrlen);
+int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockaddr *dest_addr,socklen_t addrlen);
 
-int k_recvfrom(int sockfd,
-               void *buf,
-               size_t len,
-               int flags,
-               struct sockaddr *src_addr,
-               socklen_t *addrlen);
+int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_addr,socklen_t *addrlen);
 
 int k_close(int sockfd);
 

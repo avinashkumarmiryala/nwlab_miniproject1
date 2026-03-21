@@ -14,8 +14,6 @@ void* R(void *arg){
     printf("R thread running\n");
     
     while(1){
-        // Build fd_set from all active sockets
-        // at start of while loop, before building fd_set
         pthread_mutex_lock(&sm->lock);
         for(int i = 0; i < MAX_KTP_SOCK; i++){
             if(!sm->sockets[i].is_free && sm->sockets[i].needs_udp_init == 1){
@@ -54,8 +52,7 @@ void* R(void *arg){
             usleep(500000);  // sleep 0.1 seconds if no active sockets
             continue;
         }
-        // printf("Thread R: max_fd = %d\n", max_fd);  // ADD THIS
-        // select with timeout
+        
         struct timeval timeout;
         timeout.tv_sec = TIMEOUT;
         timeout.tv_usec = 0;
@@ -109,7 +106,6 @@ void* R(void *arg){
                 printf("Thread R: received packet on socket %d\n", i);
                 printf("Thread R: type = %s, seq = %d\n", strtype[pkt.header.type], pkt.header.seq_num);
                 // simulate drop
-                //if(dropmsg(DROP_PROB)) continue;
                 if(dropmsg(DROP_PROB)){
                     printf("Thread R: packet dropped!\n");
                     continue;
@@ -126,7 +122,7 @@ void* R(void *arg){
                             break;
                         }
                     }
-                    if(duplicate) { //continue;
+                    if(duplicate) {
                         ktp_packet ack_pkt;
                         memset(&ack_pkt, 0, sizeof(ack_pkt));
                         ack_pkt.header.type = ACK;
@@ -155,7 +151,9 @@ void* R(void *arg){
                     sm->sockets[i].rwnd.rcvd_seq[tail] = seq;
 
                     // update rwnd size
+                    printf("Thread R: Reciever wnd size before update: %d\n", sm->sockets[i].rwnd.wnd_size);
                     sm->sockets[i].rwnd.wnd_size = BUF_SIZE - sm->sockets[i].recv_buf.cnt;
+                    printf("Thread R: Reciever wnd size after update: %d\n\n", sm->sockets[i].rwnd.wnd_size);
 
                     // check if in order
                     if(seq == sm->sockets[i].rwnd.exptd_seq){
@@ -183,23 +181,17 @@ void* R(void *arg){
                     
                 }
 
-              
                 else if(pkt.header.type == ACK){
                     uint8_t ack_no = pkt.header.seq_num;
                     uint8_t new_rwnd = pkt.header.rwnd;
-                    //sm->sockets[i].swnd.wnd_size = new_rwnd;
                     sm->sockets[i].swnd.acked_wnd_size = new_rwnd;
                     printf("acked window size : %d\n",new_rwnd);
 
                     // slide window 
                     while(sm->sockets[i].swnd.cnt > 0){
-                        int idx = sm->sockets[i].swnd.start % BUF_SIZE;
-                        uint8_t seq = sm->sockets[i].send_buf.msg[idx].header.seq_num;
+                        //int idx = sm->sockets[i].swnd.start % BUF_SIZE;
+                        //uint8_t seq = sm->sockets[i].send_buf.msg[idx].header.seq_num;
 
-                        // check if this message is ACKed
-                        int acked = 0;
-                        // simple check without wrap around
-                        if(seq == ack_no) acked = 1;
                         // check all seq nums between start and ack_no
                         uint8_t s = sm->sockets[i].send_buf.msg[
                             sm->sockets[i].swnd.start % BUF_SIZE
@@ -256,7 +248,6 @@ void* S(void *arg){
                         struct sockaddr_in dst = sm->sockets[i].dest_addr;
                         socklen_t dstlen = sizeof(struct sockaddr_in);
 
-                        //send over UDP
                         sendto(udpsock,&pkt,l,0,(struct sockaddr*)&dst,dstlen);
                         //reset timer
                         sm->sockets[i].swnd.send_time[j] = time(NULL);
@@ -265,8 +256,8 @@ void* S(void *arg){
             }
 
             int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
-            //int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].rwnd.wnd_size);
-            printf("Thread S: Socket number: %d Eff window size:%d Sender Win Size:%d ACKed Win Size:%d\n",i,eff_wnd,sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
+            printf("Thread S: Socket number: %d Eff window size:%d Sender Win Size:%d ACKed Win Size:%d\n",
+                i,eff_wnd,sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
 
             while ((sm->sockets[i].swnd.cnt < eff_wnd) &&
                 (sm->sockets[i].send_buf.cnt > sm->sockets[i].swnd.cnt)){

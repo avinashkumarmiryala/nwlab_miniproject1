@@ -23,7 +23,7 @@ void sig_handler(int sig) {
     exit(0);
 }
 
-//init the mem
+
 void init(){
     key_t key = ftok("documentation.txt", 1);
 
@@ -56,11 +56,6 @@ void init(){
         pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
         pthread_mutex_init(&sm->lock, &attr);
 
-        /*pthread_condattr_t cattr;
-        pthread_condattr_init(&cattr);
-        pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
-        pthread_cond_init(&sm->cond, &cattr);*/
-        
         pthread_mutex_lock(&sm->lock);
         for(int i = 0; i < MAX_KTP_SOCK; i++){
             sm->sockets[i].is_free = 1;
@@ -95,15 +90,8 @@ int k_socket(int domain, int type, int protocol){
         return -1;
     }
     
-    //int sfd = socket(AF_INET,SOCK_DGRAM,0);
     sm->sockets[idx].needs_udp_init = 1;
     sm->sockets[idx].udp_sockfd = -1;
-   /*if (sfd < 0){
-        sm->sockets[idx].is_free = 1;
-        pthread_mutex_unlock(&sm->lock);
-        return -1;
-    }*/ 
-    //sm->sockets[idx].udp_sockfd = sfd;
 
     sm->sockets[idx].pid = getpid();
 
@@ -146,7 +134,7 @@ int k_bind(int sockfd, const char *src_ip, int src_port, const char *dest_ip, in
         pthread_mutex_lock(&sm->lock);
     }
 
-    // just store the addresses — let Thread R do the actual bind!
+    // just store the addresses — let Thread R do the actual bind
     sm->sockets[sockfd].src_addr.sin_addr.s_addr = inet_addr(src_ip);
     sm->sockets[sockfd].src_addr.sin_family = AF_INET;
     sm->sockets[sockfd].src_addr.sin_port = htons(src_port);
@@ -207,7 +195,7 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
 
     if(len>MSG_SIZE) len = MSG_SIZE;
     sm->sockets[sockfd].send_buf.msg[t].len = len;
-    memcpy(sm->sockets[sockfd].send_buf.msg[t].data, buf, len); //check once more
+    memcpy(sm->sockets[sockfd].send_buf.msg[t].data, buf, len);
 
     //window size field is filled if type = ACK
     sm->sockets[sockfd].send_buf.msg[t].header.type = DATA;
@@ -244,7 +232,6 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
 
     memcpy(buf,sm->sockets[sockfd].recv_buf.msg[h].data,copy_len);    
 
-    //if(sm->sockets[sockfd].rwnd.wnd_size < BUF_SIZE)  sm->sockets[sockfd].rwnd.wnd_size++;
 
     sm->sockets[sockfd].recv_buf.cnt-=1;
     sm->sockets[sockfd].rwnd.wnd_size = BUF_SIZE - sm->sockets[sockfd].recv_buf.cnt;
