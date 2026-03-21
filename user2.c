@@ -2,16 +2,25 @@
 #include <sys/shm.h>
 #include <string.h>
 #include <sys/select.h>
-
+#include <signal.h>
 #define N 256
-int main(){
+void handler(int sig){
+    printf("\nReciever interrupted\n");
+    fflush(stdout);
+    exit(0);
+}
+int main(int argc,char* argv[]){
+    printf("Reciever started,waiting for packets...\n");
     init();
     int sockfd = k_socket(AF_INET,SOCK_KTP,0);
-    
+    signal(SIGINT,handler);
+
     const char* myip = "127.0.0.1";
     const char* dstip = "127.0.0.1";
     int my_port = 6000;
     int dst_port = 5000;
+    if(argc>1) my_port = atoi(argv[1]);
+    if(argc>2) dst_port = atoi(argv[2]);
 
     /*struct sockaddr_in myaddr;
     myaddr.sin_addr.s_addr = inet_addr("127.0.0.1");

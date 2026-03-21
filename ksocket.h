@@ -23,7 +23,7 @@
 #define SEQ_NUM_MOD 256
 
 #define TIMEOUT 5        // T seconds
-#define DROP_PROB 0.50   // p value (change during testing)
+#define DROP_PROB 0.80   // p value (change during testing)
 
 #define ENOSPACE 1001
 #define ENOTBOUND 1002
