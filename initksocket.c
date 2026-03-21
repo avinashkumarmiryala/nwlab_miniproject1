@@ -126,7 +126,18 @@ void* R(void *arg){
                             break;
                         }
                     }
-                    if(duplicate) continue;
+                    if(duplicate) { //continue;
+                        ktp_packet ack_pkt;
+                        memset(&ack_pkt, 0, sizeof(ack_pkt));
+                        ack_pkt.header.type = ACK;
+                        ack_pkt.header.seq_num = sm->sockets[i].rwnd.last_ack;
+                        ack_pkt.header.rwnd = sm->sockets[i].rwnd.wnd_size;
+                        struct sockaddr_in dst = sm->sockets[i].dest_addr;
+                        socklen_t dstlen = sizeof(dst);
+                        sendto(sm->sockets[i].udp_sockfd, &ack_pkt, sizeof(ack_pkt),
+                            0, (struct sockaddr*)&dst, dstlen);
+                        continue;  
+                    }
 
                     // check if recv_buf is full
                     if(sm->sockets[i].recv_buf.cnt == BUF_SIZE){
@@ -178,6 +189,7 @@ void* R(void *arg){
                     uint8_t new_rwnd = pkt.header.rwnd;
                     //sm->sockets[i].swnd.wnd_size = new_rwnd;
                     sm->sockets[i].swnd.acked_wnd_size = new_rwnd;
+                    printf("acked window size : %d\n",new_rwnd);
 
                     // slide window 
                     while(sm->sockets[i].swnd.cnt > 0){
@@ -208,6 +220,9 @@ void* R(void *arg){
                             sm->sockets[i].swnd.cnt--;
                         }
                     }
+                    printf("After ACK: swnd.cnt=%d send_buf.cnt=%d\n",
+                        sm->sockets[i].swnd.cnt,
+                        sm->sockets[i].send_buf.cnt);
                 }
             }
             pthread_mutex_unlock(&sm->lock);
@@ -251,7 +266,7 @@ void* S(void *arg){
 
             int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
             //int eff_wnd = min(sm->sockets[i].swnd.wnd_size,sm->sockets[i].rwnd.wnd_size);
-            printf("Thread S: Eff window size:%d Sender Win Size:%d ACKed Win Size:%d\n",eff_wnd,sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
+            printf("Thread S: Socket number: %d Eff window size:%d Sender Win Size:%d ACKed Win Size:%d\n",i,eff_wnd,sm->sockets[i].swnd.wnd_size,sm->sockets[i].swnd.acked_wnd_size);
 
             while ((sm->sockets[i].swnd.cnt < eff_wnd) &&
                 (sm->sockets[i].send_buf.cnt > sm->sockets[i].swnd.cnt)){

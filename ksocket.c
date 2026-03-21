@@ -244,9 +244,10 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
 
     memcpy(buf,sm->sockets[sockfd].recv_buf.msg[h].data,copy_len);    
 
-    if(sm->sockets[sockfd].rwnd.wnd_size < BUF_SIZE)  sm->sockets[sockfd].rwnd.wnd_size++;
+    //if(sm->sockets[sockfd].rwnd.wnd_size < BUF_SIZE)  sm->sockets[sockfd].rwnd.wnd_size++;
 
     sm->sockets[sockfd].recv_buf.cnt-=1;
+    sm->sockets[sockfd].rwnd.wnd_size = BUF_SIZE - sm->sockets[sockfd].recv_buf.cnt;
     if (sm->sockets[sockfd].nospace == 1){
         sm->sockets[sockfd].nospace = 0;
         sm->sockets[sockfd].send_ack = 1;
