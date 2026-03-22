@@ -112,6 +112,7 @@ int k_socket(int domain, int type, int protocol){
     sm->sockets[idx].rwnd.wnd_size = 10;
     sm->sockets[idx].rwnd.exptd_seq = 1;
     sm->sockets[idx].rwnd.last_ack = 0;
+    sm->sockets[idx].rwnd.last_delivered = 0; 
 
     //init to check whether bound or not
     //if bound then the port value will be updated
@@ -119,6 +120,8 @@ int k_socket(int domain, int type, int protocol){
     sm->sockets[idx].src_addr.sin_port = 0;
 
     sm->sockets[idx].nospace = 0;
+    memset(sm->sockets[idx].rwnd.rcvd_seq, 255, BUF_SIZE);
+    sm->sockets[idx].send_ack = 0; 
 
     pthread_mutex_unlock(&sm->lock);
     return idx;
@@ -195,6 +198,7 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
 
     if(len>MSG_SIZE) len = MSG_SIZE;
     sm->sockets[sockfd].send_buf.msg[t].len = len;
+    memset(sm->sockets[sockfd].send_buf.msg[t].data, 0, MSG_SIZE); 
     memcpy(sm->sockets[sockfd].send_buf.msg[t].data, buf, len);
 
     //window size field is filled if type = ACK
@@ -224,6 +228,12 @@ int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_ad
 
     int h = sm->sockets[sockfd].recv_buf.head;
     sm->sockets[sockfd].recv_buf.head = (sm->sockets[sockfd].recv_buf.head + 1)%BUF_SIZE;
+
+    uint8_t delivered_seq = sm->sockets[sockfd].recv_buf.msg[h].header.seq_num;
+    uint8_t diff_del = (uint8_t)(delivered_seq - sm->sockets[sockfd].rwnd.last_delivered);
+    if(sm->sockets[sockfd].rwnd.last_delivered == 0 || diff_del < 128){
+        sm->sockets[sockfd].rwnd.last_delivered = delivered_seq;
+    }
 
     size_t copy_len = sm->sockets[sockfd].recv_buf.msg[h].len;
 

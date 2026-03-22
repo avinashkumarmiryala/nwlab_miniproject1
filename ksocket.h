@@ -71,6 +71,7 @@ typedef struct
     int wnd_size;                   //BUF_SIZE - recv_buf.cnt (Note that it is NOT a fixed number (unlike swnd.wnd_size))
     uint8_t exptd_seq;              
     uint8_t last_ack;
+     uint8_t last_delivered; 
     uint8_t rcvd_seq[BUF_SIZE];
 } rwnd_t;
 
