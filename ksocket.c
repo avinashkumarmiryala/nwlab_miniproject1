@@ -180,7 +180,7 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
     uint32_t daddr = sm->sockets[sockfd].dest_addr.sin_addr.s_addr;
     uint16_t dport = sm->sockets[sockfd].dest_addr.sin_port;
     int16_t dfamily = sm->sockets[sockfd].dest_addr.sin_family;
-    printf("k_sendto: sending to port %d\n\n", ntohs(dest->sin_port));
+    //printf("k_sendto: sending to port %d\n\n", ntohs(dest->sin_port));
     if((daddr!=dest->sin_addr.s_addr) || (dport!=dest->sin_port) || (dfamily!=dest->sin_family)){
         k_errno = ENOTBOUND;
         pthread_mutex_unlock(&sm->lock);
@@ -212,63 +212,75 @@ int k_sendto(int sockfd,const void *buf,size_t len,int flags,const struct sockad
     return len;
 }
 
-int k_recvfrom(int sockfd,void *buf,size_t len,int flags,struct sockaddr *src_addr,socklen_t *addrlen){
-
+int k_recvfrom(int sockfd, void *buf, size_t len, int flags,
+               struct sockaddr *src_addr, socklen_t *addrlen){
     pthread_mutex_lock(&sm->lock);
+
     if(sockfd < 0 || sockfd >= MAX_KTP_SOCK){
         pthread_mutex_unlock(&sm->lock);
         return -1;
     }
-    
-    if(sm->sockets[sockfd].recv_buf.cnt==0) {
+
+    if(sm->sockets[sockfd].recv_buf.cnt == 0){
         k_errno = ENOMESSAGE;
         pthread_mutex_unlock(&sm->lock);
         return -1;
     }
 
-    int h = sm->sockets[sockfd].recv_buf.head;
-    sm->sockets[sockfd].recv_buf.head = (sm->sockets[sockfd].recv_buf.head + 1)%BUF_SIZE;
+    // find the next in-order packet to deliver
+    uint8_t want = (sm->sockets[sockfd].rwnd.last_delivered + 1) % SEQ_NUM_MOD;
+    // on first delivery, want = 1 (since last_delivered starts at 0)
 
-    uint8_t delivered_seq = sm->sockets[sockfd].recv_buf.msg[h].header.seq_num;
-    uint8_t diff_del = (uint8_t)(delivered_seq - sm->sockets[sockfd].rwnd.last_delivered);
-    if(sm->sockets[sockfd].rwnd.last_delivered == 0 || diff_del < 128){
-        sm->sockets[sockfd].rwnd.last_delivered = delivered_seq;
+    int found = -1;
+    for(int k = 0; k < sm->sockets[sockfd].recv_buf.cnt; k++){
+        int idx = (sm->sockets[sockfd].recv_buf.head + k) % BUF_SIZE;
+        if(sm->sockets[sockfd].recv_buf.msg[idx].header.seq_num == want){
+            found = idx;
+            break;
+        }
     }
 
-    size_t copy_len = sm->sockets[sockfd].recv_buf.msg[h].len;
+    if(found == -1){
+        // next in-order packet not yet arrived
+        k_errno = ENOMESSAGE;
+        pthread_mutex_unlock(&sm->lock);
+        return -1;
+    }
 
-    if(copy_len > len)
-        copy_len = len;
+    // copy data out
+    size_t copy_len = sm->sockets[sockfd].recv_buf.msg[found].len;
+    if(copy_len > len) copy_len = len;
+    memcpy(buf, sm->sockets[sockfd].recv_buf.msg[found].data, copy_len);
+    sm->sockets[sockfd].rwnd.last_delivered = want;
 
-    memcpy(buf,sm->sockets[sockfd].recv_buf.msg[h].data,copy_len);    
-
-
-    sm->sockets[sockfd].recv_buf.cnt-=1;
+    // remove from recv_buf by shifting head
+    // (swap found slot with head slot, then advance head)
+    int head = sm->sockets[sockfd].recv_buf.head;
+    if(found != head){
+        // swap so we can just advance head
+        ktp_packet tmp = sm->sockets[sockfd].recv_buf.msg[head];
+        sm->sockets[sockfd].recv_buf.msg[head] = sm->sockets[sockfd].recv_buf.msg[found];
+        sm->sockets[sockfd].recv_buf.msg[found] = tmp;
+    }
+    sm->sockets[sockfd].recv_buf.head = (head + 1) % BUF_SIZE;
+    sm->sockets[sockfd].recv_buf.cnt--;
     sm->sockets[sockfd].rwnd.wnd_size = BUF_SIZE - sm->sockets[sockfd].recv_buf.cnt;
-    if (sm->sockets[sockfd].nospace == 1){
+
+    if(sm->sockets[sockfd].nospace == 1){
         sm->sockets[sockfd].nospace = 0;
         sm->sockets[sockfd].send_ack = 1;
     }
-    //now, the thread R should send an ACK with the updated rwnd size.
 
     if(src_addr != NULL){
-        struct sockaddr_in *src = (struct sockaddr_in*)(src_addr);
-        uint32_t srcaddr = sm->sockets[sockfd].dest_addr.sin_addr.s_addr;
-        uint16_t srcport = sm->sockets[sockfd].dest_addr.sin_port;
-        int16_t srcfamily = sm->sockets[sockfd].dest_addr.sin_family;
-
-        src->sin_addr.s_addr = srcaddr;
-        src->sin_family = srcfamily;
-        src->sin_port = srcport;
+        struct sockaddr_in *src = (struct sockaddr_in*)src_addr;
+        src->sin_addr.s_addr = sm->sockets[sockfd].dest_addr.sin_addr.s_addr;
+        src->sin_family      = sm->sockets[sockfd].dest_addr.sin_family;
+        src->sin_port        = sm->sockets[sockfd].dest_addr.sin_port;
     }
-
-    if(addrlen != NULL){
-        *addrlen = sizeof(struct sockaddr_in);
-    }
+    if(addrlen != NULL) *addrlen = sizeof(struct sockaddr_in);
 
     pthread_mutex_unlock(&sm->lock);
     return copy_len;
-
 }
 
 

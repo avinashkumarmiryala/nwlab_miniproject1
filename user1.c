@@ -12,8 +12,6 @@ void handler(int sig){
 int main(int argc, char* argv[]){
     printf("Sender started, will connect within 10 sec...\n");
     init();
-    printf("Please wait for the receiver to spawn the sockets...\n");
-    sleep(10);
 
     int sockfd = k_socket(AF_INET, SOCK_KTP, 0);
     signal(SIGINT, handler);
@@ -66,7 +64,7 @@ int main(int argc, char* argv[]){
     printf("File sent! Total bytes: %d\n", total_sent);
 
     // wait for last ACKs
-    sleep(TIMEOUT * 2);
+    sleep(TIMEOUT * 4);
     k_close(sockfd);
     return 0;
 }
